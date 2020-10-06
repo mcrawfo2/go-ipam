@@ -24,7 +24,7 @@ type Prefix struct {
 	ParentCidr             string          // if this prefix is a child this is a pointer back
 	availableChildPrefixes map[string]bool // available child prefixes of this prefix
 	childPrefixLength      int             // the length of the child prefixes
-	ips                    map[string]bool // The ips contained in this prefix
+	Ips                    map[string]bool // The ips contained in this prefix
 	version                int64           // version is used for optimistic locking
 }
 
@@ -35,7 +35,7 @@ func (p Prefix) DeepCopy() *Prefix {
 		ParentCidr:             p.ParentCidr,
 		availableChildPrefixes: copyMap(p.availableChildPrefixes),
 		childPrefixLength:      p.childPrefixLength,
-		ips:                    copyMap(p.ips),
+		Ips:                    copyMap(p.Ips),
 		version:                p.version,
 	}
 }
@@ -74,7 +74,7 @@ func (i *ipamer) DeletePrefix(cidr string) (*Prefix, error) {
 	if p == nil {
 		return nil, fmt.Errorf("%w: delete prefix:%s", ErrNotFound, cidr)
 	}
-	if len(p.ips) > 2 {
+	if len(p.Ips) > 2 {
 		return nil, fmt.Errorf("prefix %s has ips, delete prefix not possible", p.Cidr)
 	}
 	prefix, err := i.storage.DeletePrefix(*p)
@@ -101,7 +101,7 @@ func (i *ipamer) acquireChildPrefixInternal(parentCidr string, length int) (*Pre
 	if prefix == nil {
 		return nil, fmt.Errorf("unable to find prefix for cidr:%s", parentCidr)
 	}
-	if len(prefix.ips) > 2 {
+	if len(prefix.Ips) > 2 {
 		return nil, fmt.Errorf("prefix %s has ips, acquire child prefix not possible", prefix.Cidr)
 	}
 	ipnet, err := prefix.IPNet()
@@ -190,7 +190,7 @@ func (i *ipamer) releaseChildPrefixInternal(child *Prefix) error {
 	if parent == nil {
 		return fmt.Errorf("prefix %s is no child prefix", child.Cidr)
 	}
-	if len(child.ips) > 2 {
+	if len(child.Ips) > 2 {
 		return fmt.Errorf("prefix %s has ips, deletion not possible", child.Cidr)
 	}
 
@@ -256,7 +256,7 @@ func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string) (*IP, 
 	}
 
 	for ip := network.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
-		_, ok := prefix.ips[ip.String()]
+		_, ok := prefix.Ips[ip.String()]
 		if ok {
 			continue
 		}
@@ -265,7 +265,7 @@ func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string) (*IP, 
 				IP:           ip,
 				ParentPrefix: prefix.Cidr,
 			}
-			prefix.ips[ip.String()] = true
+			prefix.Ips[ip.String()] = true
 			_, err := i.storage.UpdatePrefix(*prefix)
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to persist acquired ip:%v", prefix)
@@ -274,7 +274,7 @@ func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string) (*IP, 
 		}
 	}
 
-	return nil, fmt.Errorf("%w: no more ips in prefix: %s left, length of prefix.ips: %d", ErrNoIPAvailable, prefix.Cidr, len(prefix.ips))
+	return nil, fmt.Errorf("%w: no more ips in prefix: %s left, length of prefix.ips: %d", ErrNoIPAvailable, prefix.Cidr, len(prefix.Ips))
 }
 
 func (i *ipamer) AcquireIP(prefixCidr string) (*IP, error) {
@@ -299,11 +299,11 @@ func (i *ipamer) releaseIPFromPrefixInternal(prefixCidr, ip string) error {
 	if prefix == nil {
 		return fmt.Errorf("%w: unable to find prefix for cidr:%s", ErrNotFound, prefixCidr)
 	}
-	_, ok := prefix.ips[ip]
+	_, ok := prefix.Ips[ip]
 	if !ok {
 		return fmt.Errorf("%w: unable to release ip:%s because it is not allocated in prefix:%s", ErrNotFound, ip, prefixCidr)
 	}
-	delete(prefix.ips, ip)
+	delete(prefix.Ips, ip)
 	_, err := i.storage.UpdatePrefix(*prefix)
 	if err != nil {
 		return fmt.Errorf("unable to release ip %v:%v", ip, err)
@@ -362,7 +362,7 @@ func (i *ipamer) newPrefix(cidr string) (*Prefix, error) {
 	}
 	p := &Prefix{
 		Cidr:                   cidr,
-		ips:                    make(map[string]bool),
+		Ips:                    make(map[string]bool),
 		availableChildPrefixes: make(map[string]bool),
 	}
 
@@ -375,8 +375,8 @@ func (i *ipamer) newPrefix(cidr string) (*Prefix, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.ips[network.String()] = true
-	p.ips[broadcast.IP.String()] = true
+	p.Ips[network.String()] = true
+	p.Ips[broadcast.IP.String()] = true
 
 	return p, nil
 }
@@ -445,7 +445,7 @@ func (p *Prefix) availableips() uint64 {
 
 // acquiredips return the number of ips acquired in this Prefix
 func (p *Prefix) acquiredips() uint64 {
-	return uint64(len(p.ips))
+	return uint64(len(p.Ips))
 }
 
 // availablePrefixes return the amount of possible prefixes of this prefix if this is a parent prefix
