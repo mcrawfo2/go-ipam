@@ -61,7 +61,7 @@ func TestIpamer_AcquireIP(t *testing.T) {
 				t.Errorf("Could not create prefix: %v", err)
 			}
 			for _, ipString := range tt.fields.existingips {
-				p.ips[ipString] = true
+				p.Ips[ipString] = true
 			}
 
 			var updatedPrefix Prefix
@@ -592,8 +592,8 @@ func TestIpamerAcquireIP(t *testing.T) {
 			panic(err)
 		}
 		for n := 0; n < 10; n++ {
-			if len(p.ips) != 2 {
-				t.Fatalf("expected 2 ips in prefix, got %d", len(p.ips))
+			if len(p.Ips) != 2 {
+				t.Fatalf("expected 2 ips in prefix, got %d", len(p.Ips))
 			}
 			ip, err := ipam.AcquireIP(p.Cidr)
 			if err != nil {
@@ -655,18 +655,18 @@ func TestPrefixDeepCopy(t *testing.T) {
 		ParentCidr:             "4.1.0.0/16",
 		availableChildPrefixes: map[string]bool{},
 		childPrefixLength:      256,
-		ips:                    map[string]bool{},
+		Ips:                    map[string]bool{},
 		version:                2,
 	}
 
 	p1.availableChildPrefixes["4.1.2.0/24"] = true
-	p1.ips["4.1.1.1"] = true
-	p1.ips["4.1.1.2"] = true
+	p1.Ips["4.1.1.1"] = true
+	p1.Ips["4.1.1.2"] = true
 
 	p2 := p1.DeepCopy()
 
 	require.False(t, p1 == p2)
 	require.Equal(t, p1, p2)
 	require.False(t, &(p1.availableChildPrefixes) == &(p2.availableChildPrefixes))
-	require.False(t, &(p1.ips) == &(p2.ips))
+	require.False(t, &(p1.Ips) == &(p2.Ips))
 }
