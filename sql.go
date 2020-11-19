@@ -43,16 +43,16 @@ func (p Prefix) toPrefixJSON() prefixJSON {
 	}
 }
 
-func (s *sql) prefixExists(prefix Prefix) (*Prefix, bool) {
-	p, err := s.ReadPrefix(prefix.Cidr)
+func (s *sql) prefixExists(prefix Prefix, tenantid string) (*Prefix, bool) {
+	p, err := s.ReadPrefix(prefix.Cidr, tenantid)
 	if err != nil {
 		return nil, false
 	}
 	return &p, true
 }
 
-func (s *sql) CreatePrefix(prefix Prefix) (Prefix, error) {
-	existingPrefix, exists := s.prefixExists(prefix)
+func (s *sql) CreatePrefix(prefix Prefix, tenantid string) (Prefix, error) {
+	existingPrefix, exists := s.prefixExists(prefix, tenantid)
 	if exists {
 		return *existingPrefix, nil
 	}
@@ -65,13 +65,13 @@ func (s *sql) CreatePrefix(prefix Prefix) (Prefix, error) {
 	if err != nil {
 		return Prefix{}, fmt.Errorf("unable to start transaction:%v", err)
 	}
-	tx.MustExec("INSERT INTO prefixes (cidr, prefix) VALUES ($1, $2)", prefix.Cidr, pj)
+	tx.MustExec("INSERT INTO prefixes (cidr, prefix, tenantid) VALUES ($1, $2, $3)", prefix.Cidr, pj, tenantid)
 	return prefix, tx.Commit()
 }
 
-func (s *sql) ReadPrefix(prefix string) (Prefix, error) {
+func (s *sql) ReadPrefix(prefix string, tenantid string) (Prefix, error) {
 	var result []byte
-	err := s.db.Get(&result, "SELECT prefix FROM prefixes WHERE cidr=$1", prefix)
+	err := s.db.Get(&result, "SELECT prefix FROM prefixes WHERE cidr=$1 AND tenantid=$2", prefix, tenantid)
 	if err != nil {
 		return Prefix{}, fmt.Errorf("unable to read prefix:%v", err)
 	}
@@ -84,9 +84,9 @@ func (s *sql) ReadPrefix(prefix string) (Prefix, error) {
 	return pre.toPrefix(), nil
 }
 
-func (s *sql) ReadAllPrefixes() ([]Prefix, error) {
+func (s *sql) ReadAllPrefixes(tenantid string) ([]Prefix, error) {
 	var prefixes [][]byte
-	err := s.db.Select(&prefixes, "SELECT prefix FROM prefixes")
+	err := s.db.Select(&prefixes, "SELECT prefix FROM prefixes WHERE tenantid=$1", tenantid)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read prefixes:%v", err)
 	}
@@ -105,7 +105,7 @@ func (s *sql) ReadAllPrefixes() ([]Prefix, error) {
 
 // UpdatePrefix tries to update the prefix.
 // Returns OptimisticLockError if it does not succeed due to a concurrent update.
-func (s *sql) UpdatePrefix(prefix Prefix) (Prefix, error) {
+func (s *sql) UpdatePrefix(prefix Prefix, tenantid string) (Prefix, error) {
 	oldVersion := prefix.version
 	prefix.version = oldVersion + 1
 	pn, err := json.Marshal(prefix.toPrefixJSON())
@@ -116,7 +116,7 @@ func (s *sql) UpdatePrefix(prefix Prefix) (Prefix, error) {
 	if err != nil {
 		return Prefix{}, fmt.Errorf("unable to start transaction:%v", err)
 	}
-	result := tx.MustExec("SELECT prefix FROM prefixes WHERE cidr=$1 AND prefix->>'Version'=$2 FOR UPDATE", prefix.Cidr, oldVersion)
+	result := tx.MustExec("SELECT prefix FROM prefixes WHERE cidr=$1 AND tenantid=$2 AND prefix->>'Version'=$3 FOR UPDATE", prefix.Cidr, tenantid, oldVersion)
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return Prefix{}, err
@@ -128,7 +128,7 @@ func (s *sql) UpdatePrefix(prefix Prefix) (Prefix, error) {
 		}
 		return Prefix{}, newOptimisticLockError("select for update did not effect any row")
 	}
-	result = tx.MustExec("UPDATE prefixes SET prefix=$1 WHERE cidr=$2 AND prefix->>'Version'=$3", pn, prefix.Cidr, oldVersion)
+	result = tx.MustExec("UPDATE prefixes SET prefix=$1 WHERE cidr=$2 AND tenantid=$3 AND prefix->>'Version'=$4", pn, prefix.Cidr, tenantid, oldVersion)
 	rows, err = result.RowsAffected()
 	if err != nil {
 		return Prefix{}, err
@@ -143,11 +143,11 @@ func (s *sql) UpdatePrefix(prefix Prefix) (Prefix, error) {
 	return prefix, tx.Commit()
 }
 
-func (s *sql) DeletePrefix(prefix Prefix) (Prefix, error) {
+func (s *sql) DeletePrefix(prefix Prefix, tenantid string) (Prefix, error) {
 	tx, err := s.db.Beginx()
 	if err != nil {
 		return Prefix{}, fmt.Errorf("unable to start transaction:%v", err)
 	}
-	tx.MustExec("DELETE from prefixes WHERE cidr=$1", prefix.Cidr)
+	tx.MustExec("DELETE from prefixes WHERE cidr=$1 AND tenantid=$2", prefix.Cidr, tenantid)
 	return prefix, tx.Commit()
 }

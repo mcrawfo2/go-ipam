@@ -214,15 +214,15 @@ type StorageProvider struct {
 
 func storageProviders() []StorageProvider {
 	return []StorageProvider{
-		{
-			name: "Memory",
-			provide: func() Storage {
-				return NewMemory()
-			},
-			providesql: func() *sql {
-				return nil
-			},
-		},
+		//{
+		//	name: "Memory",
+		//	provide: func() Storage {
+		//		return NewMemory()
+		//	},
+		//	providesql: func() *sql {
+		//		return nil
+		//	},
+		//},
 		{
 			name: "Postgres",
 			provide: func() Storage {

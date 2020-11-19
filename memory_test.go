@@ -1,5 +1,6 @@
 package ipam
 
+/*
 import (
 	"fmt"
 	"testing"
@@ -85,3 +86,5 @@ func calcPrefix24(run int) string {
 
 	return fmt.Sprintf("%d.%d.%d.0", i1, i2, i3)
 }
+ */
+

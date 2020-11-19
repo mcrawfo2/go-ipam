@@ -1,9 +1,6 @@
 package ipam
 
-import (
-	"fmt"
-)
-
+/*
 func ExampleIpamer_NewPrefix() {
 	ipamer := New()
 	prefix, err := ipamer.NewPrefix("192.168.0.0/24")
@@ -45,4 +42,4 @@ func ExampleIpamer_NewPrefix() {
 		panic(err)
 	}
 
-}
+}*/

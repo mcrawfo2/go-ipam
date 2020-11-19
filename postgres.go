@@ -11,11 +11,15 @@ import (
 
 const postgresSchema = `
 CREATE TABLE IF NOT EXISTS prefixes (
-	cidr   text PRIMARY KEY NOT NULL,
-	prefix JSONB
+	cidr   text NOT NULL,
+	tenantid text NOT NULL,
+	prefix JSONB,
+	PRIMARY KEY (cidr,tenantid)
 );
 
 CREATE INDEX IF NOT EXISTS prefix_idx ON prefixes USING GIN(prefix);
+CREATE INDEX IF NOT EXISTS tenant_prefix_idx ON prefixes (tenantid);
+CREATE INDEX IF NOT EXISTS tenant_prefix_idx ON prefixes (cidr);
 `
 
 // SSLMode specifies how to configure ssl encryption to the database

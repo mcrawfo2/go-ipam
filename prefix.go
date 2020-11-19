@@ -16,6 +16,8 @@ var (
 	ErrNotFound NotFoundError
 	// ErrNoIPAvailable is returned if no IP is available anymore
 	ErrNoIPAvailable NoIPAvailableError
+	// ErrIpinUse is retured if IP is already aquired
+	ErrIPinUse IPinUseError
 )
 
 // Prefix is a expression of a ip with length and forms a classless network.
@@ -56,12 +58,12 @@ type Usage struct {
 	AcquiredPrefixes  uint64
 }
 
-func (i *ipamer) NewPrefix(cidr string) (*Prefix, error) {
+func (i *ipamer) NewPrefix(cidr string, tenantid string) (*Prefix, error) {
 	p, err := i.newPrefix(cidr)
 	if err != nil {
 		return nil, err
 	}
-	newPrefix, err := i.storage.CreatePrefix(*p)
+	newPrefix, err := i.storage.CreatePrefix(*p, tenantid)
 	if err != nil {
 		return nil, err
 	}
@@ -69,15 +71,15 @@ func (i *ipamer) NewPrefix(cidr string) (*Prefix, error) {
 	return &newPrefix, nil
 }
 
-func (i *ipamer) DeletePrefix(cidr string) (*Prefix, error) {
-	p := i.PrefixFrom(cidr)
+func (i *ipamer) DeletePrefix(cidr string, tenantid string) (*Prefix, error) {
+	p := i.PrefixFrom(cidr, tenantid)
 	if p == nil {
 		return nil, fmt.Errorf("%w: delete prefix:%s", ErrNotFound, cidr)
 	}
 	if len(p.Ips) > 2 {
 		return nil, fmt.Errorf("prefix %s has ips, delete prefix not possible", p.Cidr)
 	}
-	prefix, err := i.storage.DeletePrefix(*p)
+	prefix, err := i.storage.DeletePrefix(*p, tenantid)
 	if err != nil {
 		return nil, fmt.Errorf("delete prefix:%s %v", cidr, err)
 	}
@@ -85,19 +87,19 @@ func (i *ipamer) DeletePrefix(cidr string) (*Prefix, error) {
 	return &prefix, nil
 }
 
-func (i *ipamer) AcquireChildPrefix(parentCidr string, length int) (*Prefix, error) {
+func (i *ipamer) AcquireChildPrefix(parentCidr string, length int, tenantid string) (*Prefix, error) {
 	var prefix *Prefix
 	return prefix, retryOnOptimisticLock(func() error {
 		var err error
-		prefix, err = i.acquireChildPrefixInternal(parentCidr, length)
+		prefix, err = i.acquireChildPrefixInternal(parentCidr, length, tenantid)
 		return err
 	})
 }
 
 // acquireChildPrefixInternal will return a Prefix with a smaller length from the given Prefix.
 // FIXME allow variable child prefix length
-func (i *ipamer) acquireChildPrefixInternal(parentCidr string, length int) (*Prefix, error) {
-	prefix := i.PrefixFrom(parentCidr)
+func (i *ipamer) acquireChildPrefixInternal(parentCidr string, length int, tenantid string) (*Prefix, error) {
+	prefix := i.PrefixFrom(parentCidr, tenantid)
 	if prefix == nil {
 		return nil, fmt.Errorf("unable to find prefix for cidr:%s", parentCidr)
 	}
@@ -160,16 +162,16 @@ func (i *ipamer) acquireChildPrefixInternal(parentCidr string, length int) (*Pre
 
 	prefix.availableChildPrefixes[child.Cidr] = false
 
-	_, err = i.storage.UpdatePrefix(*prefix)
+	_, err = i.storage.UpdatePrefix(*prefix, tenantid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to update parent prefix:%v", prefix)
 	}
-	child, err = i.NewPrefix(child.Cidr)
+	child, err = i.NewPrefix(child.Cidr, tenantid)
 	if err != nil {
 		return nil, fmt.Errorf("unable to persist created child:%v", err)
 	}
 	child.ParentCidr = prefix.Cidr
-	_, err = i.storage.UpdatePrefix(*child)
+	_, err = i.storage.UpdatePrefix(*child, tenantid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to update parent prefix:%v", child)
 	}
@@ -177,15 +179,15 @@ func (i *ipamer) acquireChildPrefixInternal(parentCidr string, length int) (*Pre
 	return child, nil
 }
 
-func (i *ipamer) ReleaseChildPrefix(child *Prefix) error {
+func (i *ipamer) ReleaseChildPrefix(child *Prefix, tenantid string) error {
 	return retryOnOptimisticLock(func() error {
-		return i.releaseChildPrefixInternal(child)
+		return i.releaseChildPrefixInternal(child, tenantid)
 	})
 }
 
 // releaseChildPrefixInternal will mark this child Prefix as available again.
-func (i *ipamer) releaseChildPrefixInternal(child *Prefix) error {
-	parent := i.PrefixFrom(child.ParentCidr)
+func (i *ipamer) releaseChildPrefixInternal(child *Prefix, tenantid string) error {
+	parent := i.PrefixFrom(child.ParentCidr,tenantid)
 
 	if parent == nil {
 		return fmt.Errorf("prefix %s is no child prefix", child.Cidr)
@@ -195,30 +197,30 @@ func (i *ipamer) releaseChildPrefixInternal(child *Prefix) error {
 	}
 
 	parent.availableChildPrefixes[child.Cidr] = true
-	_, err := i.DeletePrefix(child.Cidr)
+	_, err := i.DeletePrefix(child.Cidr, tenantid)
 	if err != nil {
 		return fmt.Errorf("unable to release prefix %v:%v", child, err)
 	}
-	_, err = i.storage.UpdatePrefix(*parent)
+	_, err = i.storage.UpdatePrefix(*parent, tenantid)
 	if err != nil {
 		return fmt.Errorf("unable to release prefix %v:%v", child, err)
 	}
 	return nil
 }
 
-func (i *ipamer) PrefixFrom(cidr string) *Prefix {
-	prefix, err := i.storage.ReadPrefix(cidr)
+func (i *ipamer) PrefixFrom(cidr string, tenantid string) *Prefix {
+	prefix, err := i.storage.ReadPrefix(cidr, tenantid)
 	if err != nil {
 		return nil
 	}
 	return &prefix
 }
 
-func (i *ipamer) AcquireSpecificIP(prefixCidr, specificIP string) (*IP, error) {
+func (i *ipamer) AcquireSpecificIP(prefixCidr, specificIP string, tenantid string) (*IP, error) {
 	var ip *IP
 	return ip, retryOnOptimisticLock(func() error {
 		var err error
-		ip, err = i.acquireSpecificIPInternal(prefixCidr, specificIP)
+		ip, err = i.acquireSpecificIPInternal(prefixCidr, specificIP, tenantid)
 		return err
 	})
 }
@@ -227,8 +229,8 @@ func (i *ipamer) AcquireSpecificIP(prefixCidr, specificIP string) (*IP, error) {
 // If specificIP is empty, the next free IP is returned.
 // If there is no free IP an NoIPAvailableError is returned.
 // If the Prefix is not found an NotFoundError is returned.
-func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string) (*IP, error) {
-	prefix := i.PrefixFrom(prefixCidr)
+func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string, tenantid string) (*IP, error) {
+	prefix := i.PrefixFrom(prefixCidr, tenantid)
 	if prefix == nil {
 		return nil, fmt.Errorf("%w: unable to find prefix for cidr:%s", ErrNotFound, prefixCidr)
 	}
@@ -254,10 +256,13 @@ func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string) (*IP, 
 			return nil, fmt.Errorf("given ip:%s is not in %s", specificIP, prefixCidr)
 		}
 	}
-
+    var ipused bool
 	for ip := network.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
 		_, ok := prefix.Ips[ip.String()]
 		if ok {
+			if specificIP == ip.String() {
+				ipused = true
+			}
 			continue
 		}
 		if specificIP == "" || specificIP == ip.String() {
@@ -266,36 +271,38 @@ func (i *ipamer) acquireSpecificIPInternal(prefixCidr, specificIP string) (*IP, 
 				ParentPrefix: prefix.Cidr,
 			}
 			prefix.Ips[ip.String()] = true
-			_, err := i.storage.UpdatePrefix(*prefix)
+			_, err := i.storage.UpdatePrefix(*prefix, tenantid)
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to persist acquired ip:%v", prefix)
 			}
 			return acquired, nil
 		}
 	}
-
+	if ipused {
+		return nil, fmt.Errorf("%w: requested ip: %s, already in use.", ErrIPinUse, specificIP )
+	}
 	return nil, fmt.Errorf("%w: no more ips in prefix: %s left, length of prefix.ips: %d", ErrNoIPAvailable, prefix.Cidr, len(prefix.Ips))
 }
 
-func (i *ipamer) AcquireIP(prefixCidr string) (*IP, error) {
-	return i.AcquireSpecificIP(prefixCidr, "")
+func (i *ipamer) AcquireIP(prefixCidr string, tenantid string) (*IP, error) {
+	return i.AcquireSpecificIP(prefixCidr, "", tenantid)
 }
 
-func (i *ipamer) ReleaseIP(ip *IP) (*Prefix, error) {
-	err := i.ReleaseIPFromPrefix(ip.ParentPrefix, ip.IP.String())
-	prefix := i.PrefixFrom(ip.ParentPrefix)
+func (i *ipamer) ReleaseIP(ip *IP, tenantid string) (*Prefix, error) {
+	err := i.ReleaseIPFromPrefix(ip.ParentPrefix, ip.IP.String(), tenantid)
+	prefix := i.PrefixFrom(ip.ParentPrefix, tenantid)
 	return prefix, err
 }
 
-func (i *ipamer) ReleaseIPFromPrefix(prefixCidr, ip string) error {
+func (i *ipamer) ReleaseIPFromPrefix(prefixCidr, ip string, tenantid string) error {
 	return retryOnOptimisticLock(func() error {
-		return i.releaseIPFromPrefixInternal(prefixCidr, ip)
+		return i.releaseIPFromPrefixInternal(prefixCidr, ip, tenantid)
 	})
 }
 
 // releaseIPFromPrefixInternal will release the given IP for later usage.
-func (i *ipamer) releaseIPFromPrefixInternal(prefixCidr, ip string) error {
-	prefix := i.PrefixFrom(prefixCidr)
+func (i *ipamer) releaseIPFromPrefixInternal(prefixCidr, ip string, tenantid string) error {
+	prefix := i.PrefixFrom(prefixCidr, tenantid)
 	if prefix == nil {
 		return fmt.Errorf("%w: unable to find prefix for cidr:%s", ErrNotFound, prefixCidr)
 	}
@@ -304,7 +311,7 @@ func (i *ipamer) releaseIPFromPrefixInternal(prefixCidr, ip string) error {
 		return fmt.Errorf("%w: unable to release ip:%s because it is not allocated in prefix:%s", ErrNotFound, ip, prefixCidr)
 	}
 	delete(prefix.Ips, ip)
-	_, err := i.storage.UpdatePrefix(*prefix)
+	_, err := i.storage.UpdatePrefix(*prefix, tenantid)
 	if err != nil {
 		return fmt.Errorf("unable to release ip %v:%v", ip, err)
 	}
@@ -333,17 +340,17 @@ func (i *ipamer) PrefixesOverlapping(existingPrefixes []string, newPrefixes []st
 
 // getHostAddresses will return all possible ipadresses a host can get in the given prefix.
 // The IPs will be acquired by this method, so that the prefix has no free IPs afterwards.
-func (i *ipamer) getHostAddresses(prefix string) ([]string, error) {
+func (i *ipamer) getHostAddresses(prefix string, tenantid string) ([]string, error) {
 	hostAddresses := []string{}
 
-	p, err := i.NewPrefix(prefix)
+	p, err := i.NewPrefix(prefix, tenantid)
 	if err != nil {
 		return hostAddresses, err
 	}
 
 	// loop till AcquireIP signals that it has no ips left
 	for {
-		ip, err := i.AcquireIP(p.Cidr)
+		ip, err := i.AcquireIP(p.Cidr, tenantid)
 		if errors.Is(err, ErrNoIPAvailable) {
 			return hostAddresses, nil
 		}
@@ -490,6 +497,14 @@ type NotFoundError struct {
 func (o NotFoundError) Error() string {
 	return "NotFound"
 }
+
+// IPinUseError is raised if the given IP is already in use so cannot be aquired
+type IPinUseError struct {
+}
+func (o IPinUseError) Error() string {
+	return "IPinUseError"
+}
+
 
 // retries the given function if the reported error is an OptimisticLockError
 // with ten attempts and jitter delay ~100ms

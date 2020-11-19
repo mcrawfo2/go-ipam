@@ -8,30 +8,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var tenantid = "tenantid123-4567-abcd"
+
 func Test_sql_prefixExists(t *testing.T) {
 	testWithSQLBackends(t, func(t *testing.T, db *sql) {
 		require.NotNil(t, db)
 
 		// Existing Prefix
 		prefix := Prefix{Cidr: "10.0.0.0/16"}
-		p, err := db.CreatePrefix(prefix)
+		p, err := db.CreatePrefix(prefix, tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 		require.Equal(t, prefix.Cidr, p.Cidr)
-		got, exists := db.prefixExists(prefix)
+		got, exists := db.prefixExists(prefix,tenantid)
 		require.True(t, exists)
 		require.Equal(t, got.Cidr, prefix.Cidr)
 
 		// NonExisting Prefix
 		notExistingPrefix := Prefix{Cidr: "10.0.0.0/8"}
-		got, exists = db.prefixExists(notExistingPrefix)
+		got, exists = db.prefixExists(notExistingPrefix,tenantid)
 		require.False(t, exists)
 		require.Nil(t, got)
 
 		// Delete Existing Prefix
-		_, err = db.DeletePrefix(prefix)
+		_, err = db.DeletePrefix(prefix,tenantid)
 		require.Nil(t, err)
-		got, exists = db.prefixExists(prefix)
+		got, exists = db.prefixExists(prefix,tenantid)
 		require.False(t, exists)
 		require.Nil(t, got)
 	})
@@ -43,24 +45,24 @@ func Test_sql_CreatePrefix(t *testing.T) {
 
 		// Existing Prefix
 		prefix := Prefix{Cidr: "11.0.0.0/16"}
-		got, exists := db.prefixExists(prefix)
+		got, exists := db.prefixExists(prefix,tenantid)
 		require.False(t, exists)
 		require.Nil(t, got)
-		p, err := db.CreatePrefix(prefix)
+		p, err := db.CreatePrefix(prefix,tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 		require.Equal(t, prefix.Cidr, p.Cidr)
-		got, exists = db.prefixExists(prefix)
+		got, exists = db.prefixExists(prefix,tenantid)
 		require.True(t, exists)
 		require.Equal(t, got.Cidr, prefix.Cidr)
 
 		// Duplicate Prefix
-		p, err = db.CreatePrefix(prefix)
+		p, err = db.CreatePrefix(prefix,tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 		require.Equal(t, prefix.Cidr, p.Cidr)
 
-		ps, err := db.ReadAllPrefixes()
+		ps, err := db.ReadAllPrefixes(tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, ps)
 		require.Equal(t, 1, len(ps))
@@ -72,20 +74,20 @@ func Test_sql_ReadPrefix(t *testing.T) {
 		require.NotNil(t, db)
 
 		// Prefix
-		p, err := db.ReadPrefix("12.0.0.0/8")
+		p, err := db.ReadPrefix("12.0.0.0/8",tenantid)
 		require.NotNil(t, err)
 		require.Equal(t, "unable to read prefix:sql: no rows in result set", err.Error())
 		require.Empty(t, p)
 
 		prefix := Prefix{Cidr: "12.0.0.0/16"}
-		p, err = db.CreatePrefix(prefix)
+		p, err = db.CreatePrefix(prefix,tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 
-		p, err = db.ReadPrefix("12.0.0.0/16")
+		p, err = db.ReadPrefix("12.0.0.0/16",tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
-		require.Equal(t, "12.0.0.0/16", p.Cidr)
+		require.Equal(t, "12.0.0.0/16", p.Cidr,tenantid)
 	})
 }
 
@@ -94,25 +96,25 @@ func Test_sql_ReadAllPrefix(t *testing.T) {
 		require.NotNil(t, db)
 
 		// no Prefixes
-		ps, err := db.ReadAllPrefixes()
+		ps, err := db.ReadAllPrefixes(tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, ps)
 		require.Equal(t, 0, len(ps))
 
 		// One Prefix
 		prefix := Prefix{Cidr: "12.0.0.0/16"}
-		p, err := db.CreatePrefix(prefix)
+		p, err := db.CreatePrefix(prefix,tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
-		ps, err = db.ReadAllPrefixes()
+		ps, err = db.ReadAllPrefixes(tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, ps)
 		require.Equal(t, 1, len(ps))
 
 		// no Prefixes again
-		_, err = db.DeletePrefix(prefix)
+		_, err = db.DeletePrefix(prefix ,tenantid)
 		require.Nil(t, err)
-		ps, err = db.ReadAllPrefixes()
+		ps, err = db.ReadAllPrefixes(tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, ps)
 		require.Equal(t, 0, len(ps))
@@ -125,12 +127,12 @@ func Test_sql_UpdatePrefix(t *testing.T) {
 
 		// Prefix
 		prefix := Prefix{Cidr: "13.0.0.0/16", ParentCidr: "13.0.0.0/8"}
-		p, err := db.CreatePrefix(prefix)
+		p, err := db.CreatePrefix(prefix,tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 
 		// Check if present
-		p, err = db.ReadPrefix("13.0.0.0/16")
+		p, err = db.ReadPrefix("13.0.0.0/16",tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 		require.Equal(t, "13.0.0.0/16", p.Cidr)
@@ -138,10 +140,10 @@ func Test_sql_UpdatePrefix(t *testing.T) {
 
 		// Modify
 		prefix.ParentCidr = "13.0.0.0/12"
-		p, err = db.UpdatePrefix(prefix)
+		p, err = db.UpdatePrefix(prefix,tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
-		p, err = db.ReadPrefix("13.0.0.0/16")
+		p, err = db.ReadPrefix("13.0.0.0/16",tenantid)
 		require.Nil(t, err)
 		require.NotNil(t, p)
 		require.Equal(t, "13.0.0.0/16", p.Cidr)
@@ -156,7 +158,7 @@ func Test_ConcurrentAcquirePrefix(t *testing.T) {
 		ipamer := NewWithStorage(db)
 
 		const parentCidr = "1.0.0.0/16"
-		_, err := ipamer.NewPrefix(parentCidr)
+		_, err := ipamer.NewPrefix(parentCidr,tenantid)
 		require.Nil(t, err)
 
 		count := 20
@@ -184,7 +186,7 @@ func acquirePrefix(t *testing.T, db *sql, cidr string, prefixes chan string) {
 	var cp *Prefix
 	var err error
 	for cp == nil {
-		cp, err = ipamer.AcquireChildPrefix(cidr, 26)
+		cp, err = ipamer.AcquireChildPrefix(cidr, 26,tenantid)
 		if err != nil {
 			t.Error(err)
 		}
@@ -200,7 +202,7 @@ func Test_ConcurrentAcquireIP(t *testing.T) {
 		ipamer := NewWithStorage(db)
 
 		const parentCidr = "2.7.0.0/16"
-		_, err := ipamer.NewPrefix(parentCidr)
+		_, err := ipamer.NewPrefix(parentCidr,tenantid)
 		require.Nil(t, err)
 
 		count := 30
@@ -228,7 +230,7 @@ func acquireIP(t *testing.T, db *sql, prefix string, ips chan string) {
 	var ip *IP
 	var err error
 	for ip == nil {
-		ip, err = ipamer.AcquireIP(prefix)
+		ip, err = ipamer.AcquireIP(prefix,tenantid)
 		if err != nil {
 			t.Error(err)
 		}

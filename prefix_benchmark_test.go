@@ -1,29 +1,31 @@
 package ipam
 
 import (
-	"fmt"
 	"testing"
 )
 
 func benchmarkNewPrefix(ipam Ipamer, b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		p, err := ipam.NewPrefix("192.168.0.0/24")
+		p, err := ipam.NewPrefix("192.168.0.0/24",tenantid)
 		if err != nil {
 			panic(err)
 		}
 		if p == nil {
 			panic("Prefix nil")
 		}
-		_, err = ipam.DeletePrefix(p.Cidr)
+		_, err = ipam.DeletePrefix(p.Cidr,tenantid)
 		if err != nil {
 			panic(err)
 		}
 	}
 }
+/*
 func BenchmarkNewPrefixMemory(b *testing.B) {
 	ipam := New()
 	benchmarkNewPrefix(ipam, b)
 }
+ */
+
 func BenchmarkNewPrefixPostgres(b *testing.B) {
 	_, storage, err := startPostgres()
 	if err != nil {
@@ -44,33 +46,33 @@ func BenchmarkNewPrefixCockroach(b *testing.B) {
 }
 
 func benchmarkAcquireIP(ipam Ipamer, cidr string, b *testing.B) {
-	p, err := ipam.NewPrefix(cidr)
+	p, err := ipam.NewPrefix(cidr,tenantid)
 	if err != nil {
 		panic(err)
 	}
 	for n := 0; n < b.N; n++ {
-		ip, err := ipam.AcquireIP(p.Cidr)
+		ip, err := ipam.AcquireIP(p.Cidr,tenantid)
 		if err != nil {
 			panic(err)
 		}
 		if ip == nil {
 			panic("IP nil")
 		}
-		p, err = ipam.ReleaseIP(ip)
+		p, err = ipam.ReleaseIP(ip,tenantid)
 		if err != nil {
 			panic(err)
 		}
 	}
-	_, err = ipam.DeletePrefix(cidr)
+	_, err = ipam.DeletePrefix(cidr,tenantid)
 	if err != nil {
 		b.Fatalf("error deleting prefix:%v", err)
 	}
 }
 
-func BenchmarkAcquireIPMemory(b *testing.B) {
+/*func BenchmarkAcquireIPMemory(b *testing.B) {
 	ipam := New()
 	benchmarkAcquireIP(ipam, "11.0.0.0/24", b)
-}
+}*/
 func BenchmarkAcquireIPPostgres(b *testing.B) {
 	_, storage, err := startPostgres()
 	if err != nil {
@@ -90,24 +92,24 @@ func BenchmarkAcquireIPCockroach(b *testing.B) {
 	ipam := NewWithStorage(storage)
 	benchmarkAcquireIP(ipam, "10.0.0.0/16", b)
 }
-
+/*
 func benchmarkAcquireChildPrefix(parentLength, childLength int, b *testing.B) {
 	ipam := New()
-	p, err := ipam.NewPrefix(fmt.Sprintf("192.168.0.0/%d", parentLength))
+	p, err := ipam.NewPrefix(fmt.Sprintf("192.168.0.0/%d", parentLength),tenantid)
 	if err != nil {
 		panic(err)
 	}
 	for n := 0; n < b.N; n++ {
-		p, err := ipam.AcquireChildPrefix(p.Cidr, childLength)
+		p, err := ipam.AcquireChildPrefix(p.Cidr, childLength,tenantid)
 		if err != nil {
 			panic(err)
 		}
-		err = ipam.ReleaseChildPrefix(p)
+		err = ipam.ReleaseChildPrefix(p,tenantid)
 		if err != nil {
 			panic(err)
 		}
 	}
-	_, err = ipam.DeletePrefix(p.Cidr)
+	_, err = ipam.DeletePrefix(p.Cidr,tenantid)
 	if err != nil {
 		b.Fatalf("error deleting prefix:%v", err)
 	}
@@ -134,3 +136,5 @@ func BenchmarkPrefixOverlapping(b *testing.B) {
 		}
 	}
 }
+*/
+
