@@ -52,7 +52,12 @@ const (
 
 // NewPostgresStorage creates a new Storage which uses postgres.
 func NewPostgresStorage(host, port, user, password, dbname string, sslmode SSLMode) (*sql, error) {
-	db, err := sqlx.Connect("postgres", dataSource(host, port, user, password, dbname, sslmode))
+	dsn := dataSource(host, port, user, password, dbname, sslmode)
+	return NewPostgresStorageFromDsn(dsn)
+}
+
+func NewPostgresStorageFromDsn(dsn string) (*sql, error) {
+	db, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to database:%v", err)
 	}
